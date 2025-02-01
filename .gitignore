@@ -4,7 +4,9 @@ package-lock.json
 
 # Environment
 .env
+.env.local
 .env.*
+.env.*.local
 
 # Build outputs
 dist/
