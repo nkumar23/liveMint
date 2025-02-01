@@ -1,0 +1,35 @@
+{
+  "name": "performance-nft-minter",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node src/index.ts",
+    "test-mint": "ts-node src/test-mint-only.ts",
+    "test-keyboard": "ts-node src/test-keyboard.ts",
+    "test-midi": "ts-node src/test-midi.ts",
+    "test-storage": "ts-node src/test-nft-storage.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.3.0",
+    "@metaplex-foundation/umi": "^0.8.9",
+    "@metaplex-foundation/umi-bundle-defaults": "^0.8.9",
+    "@metaplex-foundation/umi-uploader-irys": "^0.8.9",
+    "@solana/spl-token": "^0.4.0",
+    "@solana/web3.js": "^1.98.0",
+    "@types/midi": "^2.0.3",
+    "dotenv": "^16.4.7",
+    "easymidi": "^3.1.0",
+    "midi": "^2.0.0",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

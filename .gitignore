@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.*
+
+# Build outputs
+dist/
+build/
+
+# System files
+.DS_Store
+*.log
+
+# IDE files
+.idea/
+.vscode/
+
+# Large files
+assets/*.jpg
+assets/*.png
+assets/*.mp3
+assets/*.wav
