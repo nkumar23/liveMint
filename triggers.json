@@ -1,0 +1,39 @@
+{
+  "triggers": [
+    {
+      "id": "midi-note-60",
+      "type": "midi",
+      "config": {
+        "noteNumber": 60,
+        "deviceName": "OP-XY"
+      },
+      "nftMetadata": {
+        "name": "Middle C NFT #{count}",
+        "symbol": "PERF",
+        "description": "NFT created from Middle C note at {timestamp}",
+        "mediaFile": "./assets/midi/note-60.jpg",
+        "attributes": {
+          "instrument": "piano",
+          "note": "C4"
+        }
+      }
+    },
+    {
+      "id": "keyboard-9",
+      "type": "keyboard",
+      "config": {
+        "key": "9"
+      },
+      "nftMetadata": {
+        "name": "Keyboard NFT #{count}",
+        "symbol": "PERF",
+        "description": "NFT created from keyboard press at {timestamp}",
+        "mediaFile": "./assets/keyboard/key-9.jpg",
+        "attributes": {
+          "trigger_type": "keyboard",
+          "key": "9"
+        }
+      }
+    }
+  ]
+} 

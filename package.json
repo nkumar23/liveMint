@@ -7,7 +7,8 @@
     "start": "ts-node src/index.ts",
     "test-mint": "ts-node src/test-mint-only.ts",
     "test-keyboard": "ts-node src/test-keyboard.ts",
-    "test-midi": "ts-node src/test-midi.ts"
+    "test-midi": "ts-node src/test-midi.ts",
+    "check-midi": "ts-node src/utils/check-midi-devices.ts"
   },
   "keywords": [],
   "author": "",

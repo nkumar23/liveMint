@@ -1,25 +1,38 @@
-export type TriggerType = 'midi' | 'keyboard';
+export type TriggerType = 'midi' | 'keyboard' | 'footpedal';
+
+export interface NftMetadata {
+  name: string;
+  symbol: string;
+  description: string;
+  mediaFile: string;
+  attributes?: {
+    [key: string]: string | number | boolean;
+  };
+}
+
+export interface TriggerMapping {
+  id: string;
+  type: TriggerType;
+  config: MidiTriggerConfig | KeyboardTriggerConfig | FootPedalConfig;
+  nftMetadata: NftMetadata;
+}
 
 export interface MinterConfig {
   // Solana configuration
   rpcEndpoint: string;
   artistWallet: string;
   
-  // NFT configuration
-  name: string;
-  symbol: string;
-  description: string;
-  mediaFile: string;
+  // Global NFT configuration
   maxSupply: number | null; // null for unlimited
-
-  // Trigger configuration
-  triggerType: TriggerType;
-  triggerConfig: MidiTriggerConfig | KeyboardTriggerConfig;
+  
+  // Trigger mappings
+  triggerMappings: TriggerMapping[];
 }
 
 export interface MidiTriggerConfig {
   noteNumber: number;
   deviceName?: string;
+  channel?: number;
 }
 
 export interface KeyboardTriggerConfig {

@@ -5,26 +5,24 @@ import {
   generateSigner,
   percentAmount,
   keypairIdentity,
-  sol,
 } from "@metaplex-foundation/umi";
 import { 
   TokenStandard,
   createV1,
   mplTokenMetadata,
 } from "@metaplex-foundation/mpl-token-metadata";
-import { MinterConfig, KeyboardTriggerConfig, MidiTriggerConfig } from '../types';
+import { MinterConfig, NftMetadata, TriggerMapping } from '../types';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as readline from 'readline';
-import { MidiTrigger } from './MidiTrigger';
+import { TriggerManager } from './TriggerManager';
 
 export class NftMinter {
   private umi: any;
   private wallet: any;
   private config: MinterConfig;
-  private mintCount: number = 0;
-  private midiTrigger: MidiTrigger | null = null;
+  private mintCounts: Map<string, number> = new Map();
+  private triggerManager: TriggerManager;
 
   constructor(config: MinterConfig) {
     this.config = config;
@@ -41,29 +39,57 @@ export class NftMinter {
     const keypairData = JSON.parse(keypairFile);
     this.wallet = this.umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
     this.umi.use(keypairIdentity(this.wallet));
+    
+    // Initialize trigger manager
+    this.triggerManager = new TriggerManager(this);
+    
+    // Initialize mint counts for each trigger
+    for (const mapping of config.triggerMappings) {
+      this.mintCounts.set(mapping.id, 0);
+    }
   }
 
-  async mintNft() {
+  async mintNft(triggerId: string, timestamp: Date): Promise<any> {
+    const triggerMapping = this.config.triggerMappings.find(m => m.id === triggerId);
+    if (!triggerMapping) {
+      throw new Error(`Trigger mapping not found for ID: ${triggerId}`);
+    }
+    
     try {
+      const currentCount = this.mintCounts.get(triggerId) || 0;
+      
+      // Check max supply if set
+      if (this.config.maxSupply !== null && currentCount >= this.config.maxSupply) {
+        console.log(`Max supply reached for trigger ${triggerId}`);
+        return null;
+      }
+      
+      // Prepare metadata with timestamp
+      const metadata = this.prepareMetadata(triggerMapping.nftMetadata, currentCount + 1, timestamp);
+      
       // Upload image
-      const imageBuffer = fs.readFileSync(this.config.mediaFile);
+      const imageBuffer = fs.readFileSync(triggerMapping.nftMetadata.mediaFile);
       const imageFile = createGenericFile(imageBuffer, 'image.jpg');
       
-      console.log('Uploading image...');
+      console.log(`Uploading image for trigger ${triggerId}...`);
       const [imageUri] = await this.umi.uploader.upload([imageFile]);
       console.log('Image uploaded:', imageUri);
 
-      // Create metadata
-      const metadata = {
-        name: `${this.config.name} #${this.mintCount + 1}`,
-        symbol: this.config.symbol,
-        description: this.config.description,
+      // Create full metadata
+      const nftMetadata = {
+        name: metadata.name,
+        symbol: metadata.symbol,
+        description: metadata.description,
         image: imageUri,
+        attributes: Object.entries(metadata.attributes || {}).map(([trait_type, value]) => ({
+          trait_type,
+          value
+        })),
       };
 
       // Upload metadata
       console.log('Uploading metadata...');
-      const metadataUri = await this.umi.uploader.uploadJson(metadata);
+      const metadataUri = await this.umi.uploader.uploadJson(nftMetadata);
       console.log('Metadata uploaded:', metadataUri);
 
       // Create NFT
@@ -78,7 +104,8 @@ export class NftMinter {
         tokenStandard: TokenStandard.NonFungible,
       }).sendAndConfirm(this.umi);
 
-      this.mintCount++;
+      // Increment mint count for this trigger
+      this.mintCounts.set(triggerId, currentCount + 1);
 
       console.log('\nNFT Created Successfully!');
       console.log('Mint Address:', mint.publicKey);
@@ -88,46 +115,48 @@ export class NftMinter {
       return {
         mint: mint.publicKey,
         transaction: tx,
+        metadata: nftMetadata,
+        timestamp: timestamp.toISOString(),
+        triggerId
       };
 
     } catch (error) {
-      console.error('Error minting NFT:', error);
+      console.error(`Error minting NFT for trigger ${triggerId}:`, error);
       throw error;
     }
   }
-
-  async startListening() {
-    if (this.config.triggerType === 'midi') {
-      this.midiTrigger = new MidiTrigger();
-      await this.midiTrigger.listen(
-        this.config.triggerConfig as MidiTriggerConfig,
-        async () => {
-          await this.mintNft();
-          return;
-        }
-      );
-    } else if (this.config.triggerType === 'keyboard') {
-      await this.setupKeyboardTrigger(this.config.triggerConfig as KeyboardTriggerConfig);
+  
+  private prepareMetadata(baseMetadata: NftMetadata, count: number, timestamp: Date): NftMetadata {
+    // Create a deep copy to avoid modifying the original
+    const metadata = JSON.parse(JSON.stringify(baseMetadata));
+    
+    // Add count to name if needed
+    if (metadata.name.includes('{count}')) {
+      metadata.name = metadata.name.replace('{count}', count.toString());
     }
+    
+    // Add timestamp to description if needed
+    if (metadata.description.includes('{timestamp}')) {
+      metadata.description = metadata.description.replace(
+        '{timestamp}', 
+        timestamp.toISOString()
+      );
+    }
+    
+    // Initialize attributes if not present
+    if (!metadata.attributes) {
+      metadata.attributes = {};
+    }
+    
+    // Add timestamp attribute
+    metadata.attributes.timestamp = timestamp.toISOString();
+    metadata.attributes.mint_number = count;
+    
+    return metadata;
   }
 
-  private async setupKeyboardTrigger(config: KeyboardTriggerConfig) {
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
-
-    console.log(`Listening for keyboard trigger: Press '${config.key}' to mint`);
-
-    process.stdin.on('keypress', async (str, key) => {
-      // Check for Ctrl+C to exit
-      if (key.ctrl && key.name === 'c') {
-        process.exit();
-      }
-
-      // Check if the pressed key matches
-      if (key.name === config.key) {
-        console.log('Keyboard trigger activated!');
-        await this.mintNft();
-      }
-    });
+  async startListening() {
+    await this.triggerManager.startAllTriggers();
+    console.log('All triggers initialized and listening');
   }
 } 
