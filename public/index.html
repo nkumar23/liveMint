@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFT Trigger Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>NFT Trigger Manager</h1>
+      <div class="actions">
+        <button id="addTriggerBtn">Add Trigger</button>
+        <button id="saveBtn">Save Changes</button>
+      </div>
+    </header>
+    
+    <div class="midi-devices">
+      <h2>Available MIDI Devices</h2>
+      <div id="midiDevicesList">Loading...</div>
+    </div>
+    
+    <div id="triggersList" class="triggers-list">
+      Loading triggers...
+    </div>
+    
+    <div id="addTriggerModal" class="modal">
+      <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Add New Trigger</h2>
+        <form id="addTriggerForm">
+          <div class="form-group">
+            <label for="triggerId">Trigger ID:</label>
+            <input type="text" id="triggerId" required>
+          </div>
+          <div class="form-group">
+            <label for="triggerType">Trigger Type:</label>
+            <select id="triggerType" required>
+              <option value="midi">MIDI</option>
+              <option value="keyboard">Keyboard</option>
+              <option value="footpedal">Foot Pedal</option>
+            </select>
+          </div>
+          <div id="midiConfig" class="config-section">
+            <h3>MIDI Configuration</h3>
+            <div class="form-group">
+              <label for="midiNoteNumber">Note Number:</label>
+              <input type="number" id="midiNoteNumber" min="0" max="127" value="60">
+            </div>
+            <div class="form-group">
+              <label for="midiDevice">Device:</label>
+              <select id="midiDevice"></select>
+            </div>
+          </div>
+          <div id="keyboardConfig" class="config-section" style="display:none;">
+            <h3>Keyboard Configuration</h3>
+            <div class="form-group">
+              <label for="keyboardKey">Key:</label>
+              <input type="text" id="keyboardKey" maxlength="1">
+            </div>
+          </div>
+          <div id="footpedalConfig" class="config-section" style="display:none;">
+            <h3>Foot Pedal Configuration</h3>
+            <div class="form-group">
+              <label for="footpedalDevice">USB Device:</label>
+              <input type="text" id="footpedalDevice">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="nftName">NFT Name:</label>
+            <input type="text" id="nftName" required>
+          </div>
+          <div class="form-group">
+            <label for="nftSymbol">NFT Symbol:</label>
+            <input type="text" id="nftSymbol" required>
+          </div>
+          <div class="form-group">
+            <label for="nftDescription">NFT Description:</label>
+            <textarea id="nftDescription" required></textarea>
+          </div>
+          <button type="submit">Add Trigger</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  
+  <script src="app.js"></script>
+</body>
+</html> 

@@ -9,9 +9,9 @@
       },
       "nftMetadata": {
         "name": "Middle C NFT #{count}",
-        "symbol": "PERF",
+        "symbol": "midi",
         "description": "NFT created from Middle C note at {timestamp}",
-        "mediaFile": "./assets/midi/note-60.jpg",
+        "mediaFile": "./assets/midi/midi-note-60.png",
         "attributes": {
           "instrument": "piano",
           "note": "C4"
@@ -26,9 +26,9 @@
       },
       "nftMetadata": {
         "name": "Keyboard NFT #{count}",
-        "symbol": "PERF",
+        "symbol": "keys",
         "description": "NFT created from keyboard press at {timestamp}",
-        "mediaFile": "./assets/keyboard/key-9.jpg",
+        "mediaFile": "./assets/keyboard/keyboard-9.jpeg",
         "attributes": {
           "trigger_type": "keyboard",
           "key": "9"
@@ -36,4 +36,4 @@
       }
     }
   ]
-} 
+}
