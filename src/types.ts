@@ -1,4 +1,14 @@
-export type TriggerType = 'midi' | 'keyboard' | 'footpedal';
+import { MidiTriggerConfig } from './triggers/MidiTriggerListener';
+import { KeyboardTriggerConfig } from './triggers/KeyboardTriggerListener';
+import { FootPedalConfig } from './triggers/FootPedalTriggerListener';
+import { IftttTriggerConfig } from './triggers/IftttTriggerListener';
+
+export enum TriggerType {
+  MIDI = 'midi',
+  KEYBOARD = 'keyboard',
+  FOOT_PEDAL = 'footpedal',
+  IFTTT = 'ifttt'
+}
 
 export interface NftMetadata {
   name: string;
@@ -13,7 +23,7 @@ export interface NftMetadata {
 export interface TriggerMapping {
   id: string;
   type: TriggerType;
-  config: MidiTriggerConfig | KeyboardTriggerConfig | FootPedalConfig;
+  config: MidiTriggerConfig | KeyboardTriggerConfig | FootPedalConfig | IftttTriggerConfig;
   nftMetadata: NftMetadata;
 }
 
@@ -27,23 +37,4 @@ export interface MinterConfig {
   
   // Trigger mappings
   triggerMappings: TriggerMapping[];
-}
-
-export interface MidiTriggerConfig {
-  noteNumber: number;
-  deviceName?: string;
-  channel?: number;
-}
-
-export interface KeyboardTriggerConfig {
-  key: string;
-  modifiers?: {
-    shift?: boolean;
-    ctrl?: boolean;
-    alt?: boolean;
-  };
-}
-
-export interface FootPedalConfig {
-  usbDevice: string;
 } 

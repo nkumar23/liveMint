@@ -1,25 +1,29 @@
-import { FootPedalConfig } from '../types';
 import { TriggerListener } from './TriggerListener';
+
+export interface FootPedalConfig {
+  usbDevice: string;
+}
 
 export class FootPedalTriggerListener implements TriggerListener {
   private config: FootPedalConfig;
-  private callback: (() => Promise<void>) | null = null;
-  
-  constructor(config: FootPedalConfig) {
+  private callback: (timestamp: Date) => void;
+  private active: boolean = false;
+
+  constructor(config: FootPedalConfig, callback: (timestamp: Date) => void) {
     this.config = config;
-  }
-
-  async start() {
-    console.log(`Foot pedal trigger initialized for device: ${this.config.usbDevice}`);
-    // Implementation would depend on the specific foot pedal hardware
-    // This is a placeholder for future implementation
-  }
-
-  stop() {
-    // Cleanup code for foot pedal
-  }
-
-  onTrigger(callback: () => Promise<void>) {
     this.callback = callback;
+  }
+
+  async start(): Promise<void> {
+    this.active = true;
+    console.log(`Listening for foot pedal on device: ${this.config.usbDevice}`);
+    
+    // This is a placeholder - in a real app, you'd use a USB HID library
+    // to connect to the foot pedal device
+  }
+
+  async stop(): Promise<void> {
+    this.active = false;
+    console.log('Foot pedal listener stopped');
   }
 } 

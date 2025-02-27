@@ -1,57 +1,78 @@
 import { MinterConfig, TriggerMapping, TriggerType } from '../types';
-import { MidiTriggerListener } from '../triggers/MidiTriggerListener';
-import { KeyboardTriggerListener } from '../triggers/KeyboardTriggerListener';
-import { FootPedalTriggerListener } from '../triggers/FootPedalTriggerListener';
+import { MidiTriggerListener, MidiTriggerConfig } from '../triggers/MidiTriggerListener';
+import { KeyboardTriggerListener, KeyboardTriggerConfig } from '../triggers/KeyboardTriggerListener';
+import { FootPedalTriggerListener, FootPedalConfig } from '../triggers/FootPedalTriggerListener';
+import { IftttTriggerListener, IftttTriggerConfig } from '../triggers/IftttTriggerListener';
 import { TriggerListener } from '../triggers/TriggerListener';
 import { NftMinter } from './NftMinter';
+import express from 'express';
 
 export class TriggerManager {
-  private triggers: Map<string, TriggerListener> = new Map();
+  private config: MinterConfig;
   private minter: NftMinter;
+  private listeners: Map<string, TriggerListener> = new Map();
+  private app: express.Application;
 
-  constructor(minter: NftMinter) {
+  constructor(config: MinterConfig, minter: NftMinter, app: express.Application) {
+    this.config = config;
     this.minter = minter;
+    this.app = app;
   }
 
-  async startAllTriggers() {
-    const config = (this.minter as any).config as MinterConfig;
-    
-    for (const mapping of config.triggerMappings) {
-      const trigger = this.createTriggerListener(mapping);
-      
-      if (trigger) {
-        trigger.onTrigger(async () => {
-          const timestamp = new Date();
-          console.log(`Trigger ${mapping.id} activated at ${timestamp.toISOString()}`);
-          await this.minter.mintNft(mapping.id, timestamp);
-        });
-        
-        await trigger.start();
-        this.triggers.set(mapping.id, trigger);
-        console.log(`Trigger ${mapping.id} (${mapping.type}) started`);
+  async initializeTriggers(): Promise<void> {
+    for (const mapping of this.config.triggerMappings) {
+      await this.initializeTrigger(mapping);
+    }
+    console.log('All triggers initialized and listening');
+  }
+
+  private async initializeTrigger(mapping: TriggerMapping): Promise<void> {
+    const callback = async (timestamp: Date) => {
+      console.log(`Trigger ${mapping.id} activated at ${timestamp.toISOString()}`);
+      try {
+        await this.minter.mintNft(mapping.id, timestamp);
+      } catch (error) {
+        console.error(`Error minting NFT for trigger ${mapping.id}:`, error);
       }
-    }
-  }
-  
-  private createTriggerListener(mapping: TriggerMapping): TriggerListener | null {
+    };
+
+    let listener: TriggerListener;
+
     switch (mapping.type) {
-      case 'midi':
-        return new MidiTriggerListener(mapping.config as any);
-      case 'keyboard':
-        return new KeyboardTriggerListener(mapping.config as any);
-      case 'footpedal':
-        return new FootPedalTriggerListener(mapping.config as any);
+      case TriggerType.MIDI:
+        listener = new MidiTriggerListener(mapping.config as MidiTriggerConfig, callback);
+        break;
+      case TriggerType.KEYBOARD:
+        listener = new KeyboardTriggerListener(mapping.config as KeyboardTriggerConfig, callback);
+        break;
+      case TriggerType.FOOT_PEDAL:
+        listener = new FootPedalTriggerListener(mapping.config as FootPedalConfig, callback);
+        break;
+      case TriggerType.IFTTT:
+        listener = new IftttTriggerListener(mapping.config as IftttTriggerConfig, callback, this.app);
+        break;
       default:
-        console.error(`Unknown trigger type: ${mapping.type}`);
-        return null;
+        throw new Error(`Unsupported trigger type: ${mapping.type}`);
     }
+
+    await listener.start();
+    this.listeners.set(mapping.id, listener);
+    console.log(`Trigger ${mapping.id} (${mapping.type}) started`);
   }
-  
-  stopAllTriggers() {
-    for (const [id, trigger] of this.triggers.entries()) {
-      trigger.stop();
+
+  async stopAllTriggers(): Promise<void> {
+    for (const [id, listener] of this.listeners.entries()) {
+      await listener.stop();
       console.log(`Trigger ${id} stopped`);
     }
-    this.triggers.clear();
+    this.listeners.clear();
+  }
+  
+  getIftttWebhookUrl(triggerId: string): string | null {
+    const listener = this.listeners.get(triggerId);
+    if (listener && listener instanceof IftttTriggerListener) {
+      return (listener as IftttTriggerListener).getWebhookUrl();
+    }
+    return null;
   }
 } 

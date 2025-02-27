@@ -40,6 +40,7 @@
               <option value="midi">MIDI</option>
               <option value="keyboard">Keyboard</option>
               <option value="footpedal">Foot Pedal</option>
+              <option value="ifttt">IFTTT Webhook</option>
             </select>
           </div>
           <div id="midiConfig" class="config-section">
@@ -66,6 +67,20 @@
               <label for="footpedalDevice">USB Device:</label>
               <input type="text" id="footpedalDevice">
             </div>
+          </div>
+          <div id="iftttConfig" class="config-section" style="display:none;">
+            <h3>IFTTT Configuration</h3>
+            <div class="form-group">
+              <label for="iftttEventName">Event Name:</label>
+              <input type="text" id="iftttEventName" placeholder="twitter_post">
+            </div>
+            <div class="form-group">
+              <label for="iftttSecretKey">Secret Key (optional):</label>
+              <input type="text" id="iftttSecretKey" placeholder="Leave blank to auto-generate">
+            </div>
+            <p class="help-text">
+              After creating this trigger, you'll get a webhook URL to use in your IFTTT applet.
+            </p>
           </div>
           <div class="form-group">
             <label for="nftName">NFT Name:</label>

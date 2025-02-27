@@ -15,42 +15,66 @@ import { MinterConfig, NftMetadata, TriggerMapping } from '../types';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { TriggerManager } from './TriggerManager';
+import express from 'express';
 
 export class NftMinter {
+  private config: MinterConfig;
   private umi: any;
   private wallet: any;
-  private config: MinterConfig;
   private mintCounts: Map<string, number> = new Map();
-  private triggerManager: TriggerManager;
+  private app: express.Application | null = null;
 
   constructor(config: MinterConfig) {
     this.config = config;
-    
-    // Initialize Umi
-    this.umi = createUmi(config.rpcEndpoint)
-      .use(irysUploader())
-      .use(mplTokenMetadata());
-    
-    // Load wallet
-    const homeDir = os.homedir();
-    const walletPath = config.artistWallet.replace('~', homeDir);
-    const keypairFile = fs.readFileSync(walletPath, 'utf-8');
-    const keypairData = JSON.parse(keypairFile);
-    this.wallet = this.umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
-    this.umi.use(keypairIdentity(this.wallet));
-    
-    // Initialize trigger manager
-    this.triggerManager = new TriggerManager(this);
-    
-    // Initialize mint counts for each trigger
-    for (const mapping of config.triggerMappings) {
-      this.mintCounts.set(mapping.id, 0);
-    }
   }
 
   async initialize() {
-    // Additional initialization code would go here
+    try {
+      console.log('Initializing NFT minter...');
+      
+      // Initialize Umi
+      this.umi = createUmi(this.config.rpcEndpoint)
+        .use(irysUploader())
+        .use(mplTokenMetadata());
+      
+      // Load wallet
+      const homeDir = os.homedir();
+      const walletPath = this.config.artistWallet.replace('~', homeDir);
+      console.log(`Loading wallet from: ${walletPath}`);
+      
+      if (!fs.existsSync(walletPath)) {
+        throw new Error(`Wallet file not found at: ${walletPath}`);
+      }
+      
+      const keypairFile = fs.readFileSync(walletPath, 'utf-8');
+      const keypairData = JSON.parse(keypairFile);
+      this.wallet = this.umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
+      this.umi.use(keypairIdentity(this.wallet));
+      
+      console.log(`Wallet loaded successfully`);
+      
+      // Initialize mint counts for each trigger
+      for (const mapping of this.config.triggerMappings) {
+        this.mintCounts.set(mapping.id, 0);
+      }
+      
+      console.log('NFT minter initialized successfully');
+    } catch (error) {
+      console.error('Error initializing NFT minter:', error);
+      throw error;
+    }
+  }
+
+  // Helper method to derive public key from secret key
+  private derivePublicKey(secretKey: Uint8Array): Uint8Array {
+    try {
+      // This is a simplified version - in a real app, you'd use the proper crypto library
+      // For now, we'll just return the last 32 bytes of the secret key as a placeholder
+      return secretKey.slice(32, 64);
+    } catch (error) {
+      console.error('Error deriving public key:', error);
+      throw error;
+    }
   }
 
   async mintNft(triggerId: string, timestamp: Date = new Date()): Promise<string> {
@@ -79,12 +103,18 @@ export class NftMinter {
       
       // Fix the file path - if it starts with a slash and doesn't have the full project path
       let mediaFilePath = metadata.mediaFile;
-      if (mediaFilePath.startsWith('/assets/')) {
-        // Convert from web path to filesystem path
-        mediaFilePath = path.join(__dirname, '../../', mediaFilePath.substring(1));
+      if (mediaFilePath.startsWith('./')) {
+        // Convert from relative path to absolute path
+        mediaFilePath = path.join(__dirname, '../../', mediaFilePath.substring(2));
       }
       
-      // Read the media file
+      console.log(`Loading media file from: ${mediaFilePath}`);
+      
+      // Check if the file exists
+      if (!fs.existsSync(mediaFilePath)) {
+        throw new Error(`Media file not found: ${mediaFilePath}`);
+      }
+      
       const mediaData = fs.readFileSync(mediaFilePath);
       
       // Upload image
@@ -145,8 +175,44 @@ export class NftMinter {
     return result;
   }
 
-  async startListening() {
-    await this.triggerManager.startAllTriggers();
-    console.log('All triggers initialized and listening');
+  // Add this method to the NftMinter class for testing
+  async mockMintNft(triggerId: string, timestamp: Date = new Date()): Promise<string> {
+    try {
+      // Find the trigger mapping
+      const mapping = this.config.triggerMappings.find(m => m.id === triggerId);
+      if (!mapping) {
+        throw new Error(`Trigger mapping not found for ID: ${triggerId}`);
+      }
+
+      // Get the current count for this trigger
+      const currentCount = this.mintCounts.get(triggerId) || 0;
+      
+      // Check max supply if set
+      if (this.config.maxSupply !== null && currentCount >= this.config.maxSupply) {
+        console.log(`Max supply reached for trigger ${triggerId}`);
+        return "Max supply reached";
+      }
+
+      // Get the metadata for this NFT
+      const metadata = { ...mapping.nftMetadata };
+      
+      // Replace placeholders in metadata
+      metadata.name = metadata.name.replace('{count}', (currentCount + 1).toString());
+      metadata.description = metadata.description.replace('{timestamp}', timestamp.toISOString());
+      
+      console.log(`MOCK: Would mint NFT with name "${metadata.name}"`);
+      console.log(`MOCK: Using media file: ${metadata.mediaFile}`);
+      
+      // Increment mint count for this trigger
+      this.mintCounts.set(triggerId, currentCount + 1);
+
+      console.log('\nMOCK NFT Created Successfully!');
+      const mockMintAddress = `mock-mint-${Date.now()}`;
+      
+      return mockMintAddress;
+    } catch (error) {
+      console.error(`Error in mock minting NFT for trigger ${triggerId}:`, error);
+      throw error;
+    }
   }
 } 

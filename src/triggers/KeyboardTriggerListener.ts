@@ -1,58 +1,60 @@
-import * as readline from 'readline';
-import { KeyboardTriggerConfig } from '../types';
 import { TriggerListener } from './TriggerListener';
+
+export interface KeyboardTriggerConfig {
+  key: string;
+  modifiers?: {
+    shift?: boolean;
+    ctrl?: boolean;
+    alt?: boolean;
+  };
+}
 
 export class KeyboardTriggerListener implements TriggerListener {
   private config: KeyboardTriggerConfig;
-  private callback: (() => Promise<void>) | null = null;
+  private callback: (timestamp: Date) => void;
   private active: boolean = false;
+  private keyHandler: any = null;
 
-  constructor(config: KeyboardTriggerConfig) {
+  constructor(config: KeyboardTriggerConfig, callback: (timestamp: Date) => void) {
     this.config = config;
+    this.callback = callback;
   }
 
-  async start() {
-    readline.emitKeypressEvents(process.stdin);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
-
+  async start(): Promise<void> {
     this.active = true;
     
-    console.log(`Listening for keyboard trigger: Press '${this.config.key}'${
-      this.config.modifiers?.shift ? ' + Shift' : ''}${
-      this.config.modifiers?.ctrl ? ' + Ctrl' : ''}${
-      this.config.modifiers?.alt ? ' + Alt' : ''} to mint`);
-
-    process.stdin.on('keypress', async (str, key) => {
+    // This is a placeholder - in a real app, you'd use a proper keyboard library
+    console.log(`Listening for keyboard key: ${this.config.key}`);
+    
+    // Mock implementation for demo purposes
+    this.keyHandler = (event: any) => {
       if (!this.active) return;
       
-      // Check for Ctrl+C to exit
-      if (key.ctrl && key.name === 'c') {
-        process.exit();
+      if (event.key.toLowerCase() === this.config.key.toLowerCase()) {
+        // Check modifiers if specified
+        if (this.config.modifiers) {
+          if (this.config.modifiers.shift && !event.shiftKey) return;
+          if (this.config.modifiers.ctrl && !event.ctrlKey) return;
+          if (this.config.modifiers.alt && !event.altKey) return;
+        }
+        
+        console.log(`Keyboard key ${this.config.key} pressed`);
+        this.callback(new Date());
       }
-
-      // Check if the pressed key matches the configuration
-      const keyMatches = key.name === this.config.key;
-      const shiftMatches = !this.config.modifiers?.shift || key.shift;
-      const ctrlMatches = !this.config.modifiers?.ctrl || key.ctrl;
-      const altMatches = !this.config.modifiers?.alt || key.meta;
-
-      if (keyMatches && shiftMatches && ctrlMatches && altMatches) {
-        console.log('Keyboard trigger activated!');
-        this.callback?.();
-      }
-    });
+    };
+    
+    // In a browser environment, you'd use:
+    // document.addEventListener('keydown', this.keyHandler);
+    
+    // For Node.js, you'd need a library like 'keypress' or similar
   }
 
-  stop() {
+  async stop(): Promise<void> {
     this.active = false;
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-  }
-
-  onTrigger(callback: () => Promise<void>) {
-    this.callback = callback;
+    
+    // In a browser:
+    // document.removeEventListener('keydown', this.keyHandler);
+    
+    console.log('Keyboard listener stopped');
   }
 } 

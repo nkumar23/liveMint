@@ -2,8 +2,7 @@ import { MidiTriggerConfig } from '../types';
 
 export interface TriggerListener {
   start(): Promise<void>;
-  stop(): void;
-  onTrigger(callback: () => Promise<void>): void;
+  stop(): Promise<void>;
 }
 
 export class MidiTriggerListener implements TriggerListener {

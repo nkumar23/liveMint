@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const footpedalConfig = document.getElementById('footpedalConfig');
   const midiDevicesList = document.getElementById('midiDevicesList');
   const midiDeviceSelect = document.getElementById('midiDevice');
+  const iftttConfig = document.getElementById('iftttConfig');
   
   // State
   let triggers = { triggers: [] };
@@ -287,6 +288,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       });
     });
+    
+    // Add event listeners for copy webhook buttons
+    document.querySelectorAll('.copy-webhook-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const triggerId = btn.dataset.id;
+        const webhookUrlElement = document.querySelector(`.webhook-url[data-id="${triggerId}"]`);
+        
+        try {
+          await navigator.clipboard.writeText(webhookUrlElement.textContent);
+          alert('Webhook URL copied to clipboard!');
+        } catch (err) {
+          console.error('Failed to copy webhook URL:', err);
+          alert('Failed to copy webhook URL. Please copy it manually.');
+        }
+      });
+    });
+    
+    // Update webhook URLs
+    updateWebhookUrls();
   }
   
   // Render config based on trigger type
@@ -306,6 +326,13 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'footpedal':
         return `
           <p><strong>USB Device:</strong> ${trigger.config.usbDevice}</p>
+        `;
+      case 'ifttt':
+        return `
+          <p><strong>Event Name:</strong> ${trigger.config.eventName}</p>
+          <p><strong>Secret Key:</strong> ${trigger.config.secretKey ? '••••••••' : 'None'}</p>
+          <p><strong>Webhook URL:</strong> <span class="webhook-url" data-id="${trigger.id}">Loading...</span></p>
+          <button class="copy-webhook-btn" data-id="${trigger.id}">Copy URL</button>
         `;
       default:
         return '<p>Unknown trigger type</p>';
@@ -350,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
     midiConfig.style.display = 'none';
     keyboardConfig.style.display = 'none';
     footpedalConfig.style.display = 'none';
+    iftttConfig.style.display = 'none';
     
     switch (type) {
       case 'midi':
@@ -360,6 +388,9 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       case 'footpedal':
         footpedalConfig.style.display = 'block';
+        break;
+      case 'ifttt':
+        iftttConfig.style.display = 'block';
         break;
     }
   });
@@ -405,6 +436,12 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'footpedal':
         config = {
           usbDevice: document.getElementById('footpedalDevice').value
+        };
+        break;
+      case 'ifttt':
+        config = {
+          eventName: document.getElementById('iftttEventName').value,
+          secretKey: document.getElementById('iftttSecretKey').value || undefined
         };
         break;
     }
@@ -456,6 +493,45 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Failed to save changes. Please try again.');
     }
   });
+  
+  // Add this function to fetch webhook URLs
+  async function fetchWebhookUrls() {
+    try {
+      const response = await fetch('/api/webhook-urls');
+      const data = await response.json();
+      
+      // Update the webhook URL elements
+      data.webhooks.forEach(webhook => {
+        const element = document.querySelector(`.webhook-url[data-id="${webhook.triggerId}"]`);
+        if (element) {
+          element.textContent = `${window.location.origin}${webhook.url}`;
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching webhook URLs:', error);
+    }
+  }
+  
+  // Call this after rendering triggers
+  fetchWebhookUrls();
+  
+  // Add this function to update webhook URLs in the UI
+  function updateWebhookUrls() {
+    // Find all IFTTT triggers
+    const iftttTriggers = triggers.triggers.filter(t => t.type === 'ifttt');
+    
+    iftttTriggers.forEach(trigger => {
+      const eventName = trigger.config.eventName;
+      const secretKey = trigger.config.secretKey;
+      const url = `/api/webhook/ifttt/${eventName}${secretKey ? `?key=${secretKey}` : ''}`;
+      
+      // Find the webhook URL element for this trigger
+      const element = document.querySelector(`.webhook-url[data-id="${trigger.id}"]`);
+      if (element) {
+        element.textContent = `${window.location.origin}${url}`;
+      }
+    });
+  }
   
   // Initialize
   fetchTriggers();

@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { config as loadEnv } from 'dotenv';
 import * as easymidi from 'easymidi';
+import fetch from 'node-fetch';
 
 loadEnv();
 
@@ -226,6 +227,136 @@ app.post('/api/rename-file', (req, res) => {
     console.error('Error renaming file:', error);
     res.status(500).json({ error: 'Failed to rename file' });
   }
+});
+
+// Update the webhook URLs endpoint
+app.get('/api/webhook-urls', (req, res) => {
+  try {
+    // Read the triggers.json file
+    const triggersPath = path.join(__dirname, '../../triggers.json');
+    const triggers = JSON.parse(fs.readFileSync(triggersPath, 'utf-8'));
+    
+    // Extract IFTTT triggers and generate webhook URLs
+    const webhooks = triggers.triggers
+      .filter((trigger: any) => trigger.type === 'ifttt')
+      .map((trigger: any) => {
+        const eventName = trigger.config.eventName;
+        const secretKey = trigger.config.secretKey;
+        const url = `/api/webhook/ifttt/${eventName}${secretKey ? `?key=${secretKey}` : ''}`;
+        
+        return {
+          triggerId: trigger.id,
+          url
+        };
+      });
+    
+    res.json({ webhooks });
+  } catch (error) {
+    console.error('Error getting webhook URLs:', error);
+    res.status(500).json({ error: 'Failed to get webhook URLs' });
+  }
+});
+
+// Update the webhook endpoint with better error handling
+app.post('/api/webhook/ifttt/:eventName', (req, res) => {
+  try {
+    const eventName = req.params.eventName;
+    const key = req.query.key || req.headers['x-ifttt-key'];
+    
+    console.log(`Received webhook for event: ${eventName}`);
+    console.log('Request body:', JSON.stringify(req.body));
+    console.log('Request headers:', JSON.stringify(req.headers));
+    
+    // Try to handle the webhook directly instead of forwarding
+    try {
+      // Find the trigger in triggers.json
+      const triggersPath = path.join(__dirname, '../../triggers.json');
+      const triggers = JSON.parse(fs.readFileSync(triggersPath, 'utf-8'));
+      
+      const trigger = triggers.triggers.find((t: any) => 
+        t.type === 'ifttt' && t.config.eventName === eventName
+      );
+      
+      if (!trigger) {
+        console.error(`No trigger found for event: ${eventName}`);
+        return res.status(404).json({ error: 'Trigger not found' });
+      }
+      
+      console.log(`Found trigger: ${trigger.id}`);
+      
+      // Respond to IFTTT immediately to prevent timeout
+      res.json({ 
+        success: true, 
+        message: 'Webhook received and will be processed',
+        triggerId: trigger.id
+      });
+      
+      // Process the webhook asynchronously
+      setTimeout(() => {
+        try {
+          // Forward to the webhook server
+          fetch(`http://localhost:${process.env.WEBHOOK_PORT || 3001}/api/webhook/ifttt/${eventName}${key ? `?key=${key}` : ''}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(key ? { 'x-ifttt-key': key.toString() } : {})
+            },
+            body: JSON.stringify(req.body)
+          })
+          .then(response => response.json())
+          .then(data => {
+            console.log('Background response from webhook server:', data);
+          })
+          .catch(error => {
+            console.error('Background error forwarding webhook:', error);
+          });
+        } catch (error) {
+          console.error('Error in async webhook processing:', error);
+        }
+      }, 0);
+      
+    } catch (error) {
+      console.error('Error processing webhook directly:', error);
+      res.status(500).json({ error: 'Internal server error', details: error.message });
+    }
+  } catch (error) {
+    console.error('Unhandled error in webhook endpoint:', error);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
+  }
+});
+
+// Add a simple test endpoint
+app.get('/api/test', (req, res) => {
+  console.log('Test endpoint hit!');
+  res.json({ success: true, message: 'Test endpoint working' });
+});
+
+// Add a test endpoint to check webhook server connectivity
+app.get('/api/test-webhook-server', (req, res) => {
+  console.log('Testing webhook server connectivity...');
+  
+  fetch(`http://localhost:${process.env.WEBHOOK_PORT || 3001}/api/webhook-test`)
+    .then(response => response.json())
+    .then(data => {
+      console.log('Webhook server response:', data);
+      res.json({ 
+        success: true, 
+        message: 'Webhook server is reachable',
+        webhookServerResponse: data
+      });
+    })
+    .catch(error => {
+      console.error('Error connecting to webhook server:', error);
+      res.status(500).json({ 
+        error: 'Failed to connect to webhook server',
+        details: error.message
+      });
+    });
+});
+
+// Add a health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Start the server
