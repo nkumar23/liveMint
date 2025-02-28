@@ -54,6 +54,7 @@ export class IftttTriggerListener implements TriggerListener {
   async stop(): Promise<void> {
     console.log(`Stopping IFTTT webhook listener for event: ${this.config.eventName}`);
     // No need to explicitly stop anything as Express will handle this
+    return Promise.resolve();
   }
 
   getWebhookUrl(): string {

@@ -1,37 +1,20 @@
 {
   "triggers": [
     {
-      "id": "midi-note-60",
+      "id": "midi1",
       "type": "midi",
       "config": {
         "noteNumber": 60,
         "deviceName": "OP-XY"
       },
       "nftMetadata": {
-        "name": "Middle C NFT #{count}",
-        "symbol": "midi",
-        "description": "NFT created from Middle C note at {timestamp}",
-        "mediaFile": "./assets/midi/midi-note-60.png",
+        "name": "MIDI Note C4",
+        "symbol": "MIDI",
+        "description": "NFT created from MIDI note C4 at {timestamp}",
+        "mediaFile": "./assets/midi/midi-pigeon.png",
         "attributes": {
-          "instrument": "piano",
-          "note": "C4"
-        }
-      }
-    },
-    {
-      "id": "keyboard-9",
-      "type": "keyboard",
-      "config": {
-        "key": "9"
-      },
-      "nftMetadata": {
-        "name": "Keyboard NFT #{count}",
-        "symbol": "keys",
-        "description": "NFT created from keyboard press at {timestamp}",
-        "mediaFile": "./assets/keyboard/keyboard-9.jpeg",
-        "attributes": {
-          "trigger_type": "keyboard",
-          "key": "9"
+          "note": "C4",
+          "velocity": 127
         }
       }
     },
@@ -43,9 +26,25 @@
       },
       "nftMetadata": {
         "name": "Tweet-trigger",
-        "symbol": "tweet",
-        "description": "NFT created from nkumar23 tweet",
+        "symbol": "TWEET",
+        "description": "NFT created from tweet at {timestamp}",
         "mediaFile": "./assets/ifttt/3-1740690640414.png",
+        "attributes": {
+          "platform": "Twitter"
+        }
+      }
+    },
+    {
+      "id": "key10",
+      "type": "keyboard",
+      "config": {
+        "key": "9"
+      },
+      "nftMetadata": {
+        "name": "keyboard",
+        "symbol": "keys",
+        "description": "NFT mint triggered when i press 9 on a keyboard",
+        "mediaFile": "./assets/keyboard/key10-1740761973372.jpeg",
         "attributes": {}
       }
     }

@@ -77,7 +77,7 @@ app.post('/api/upload', (req, res) => {
     console.log(`File uploaded for trigger: ${triggerId}, type: ${triggerType}`);
     
     // Now move the file to the correct directory
-    const targetDir = path.join(__dirname, '../../assets', triggerType);
+    const targetDir = path.join(process.cwd(), 'assets', triggerType);
     
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -93,17 +93,45 @@ app.post('/api/upload', (req, res) => {
     
     console.log(`Moved file to: ${targetPath}`);
     
+    // Verify the file exists at the target path
+    if (!fs.existsSync(targetPath)) {
+      console.error(`File not found at target path after move: ${targetPath}`);
+      return res.status(500).json({ error: 'File upload failed - file not found after move' });
+    }
+    
+    // Get file stats to verify it's a valid file
+    try {
+      const stats = fs.statSync(targetPath);
+      if (!stats.isFile()) {
+        console.error(`Target path is not a file: ${targetPath}`);
+        return res.status(500).json({ error: 'File upload failed - target is not a file' });
+      }
+      
+      if (stats.size === 0) {
+        console.error(`File is empty: ${targetPath}`);
+        return res.status(500).json({ error: 'File upload failed - file is empty' });
+      }
+      
+      console.log(`File verified: ${targetPath}, size: ${stats.size} bytes`);
+    } catch (error) {
+      console.error(`Error verifying file: ${error}`);
+      return res.status(500).json({ error: 'File upload failed - error verifying file' });
+    }
+    
     // Update triggers.json
     try {
-      const triggersPath = path.join(__dirname, '../../triggers.json');
+      const triggersPath = path.join(process.cwd(), 'triggers.json');
       const triggers = JSON.parse(fs.readFileSync(triggersPath, 'utf-8'));
       
       const triggerIndex = triggers.triggers.findIndex((t: any) => t.id === triggerId);
       
       if (triggerIndex >= 0) {
-        // Update the media file path
+        // Update the media file path - use consistent format with ./
         triggers.triggers[triggerIndex].nftMetadata.mediaFile = `./assets/${triggerType}/${filename}`;
         fs.writeFileSync(triggersPath, JSON.stringify(triggers, null, 2));
+        
+        // Log the updated path
+        console.log(`Updated media file path: ${triggers.triggers[triggerIndex].nftMetadata.mediaFile}`);
         
         res.json({ 
           success: true, 
@@ -132,7 +160,7 @@ app.get('/api/midi-devices', (req, res) => {
 app.get('/api/media-files/:triggerType', (req, res) => {
   try {
     const triggerType = req.params.triggerType;
-    const mediaDir = path.join(__dirname, '../../assets', triggerType);
+    const mediaDir = path.join(process.cwd(), 'assets', triggerType);
     
     console.log(`Looking for media files in: ${mediaDir}`);
     
@@ -181,7 +209,13 @@ app.post('/api/rename-file', (req, res) => {
     }
     
     // Extract the old filename and directory
-    const oldFilePath = path.join(__dirname, '../../', oldPath.replace('./', ''));
+    let oldFilePath;
+    if (oldPath.startsWith('./')) {
+      oldFilePath = path.join(process.cwd(), oldPath.substring(2));
+    } else {
+      oldFilePath = path.join(process.cwd(), oldPath);
+    }
+    
     const dirPath = path.dirname(oldFilePath);
     const fileExt = path.extname(oldPath);
     
@@ -317,11 +351,15 @@ app.post('/api/webhook/ifttt/:eventName', (req, res) => {
       
     } catch (error) {
       console.error('Error processing webhook directly:', error);
-      res.status(500).json({ error: 'Internal server error', details: error.message });
+      // Fix: Type check the error before accessing message property
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: 'Internal server error', details: errorMessage });
     }
   } catch (error) {
     console.error('Unhandled error in webhook endpoint:', error);
-    res.status(500).json({ error: 'Internal server error', details: error.message });
+    // Fix: Type check the error before accessing message property
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Internal server error', details: errorMessage });
   }
 });
 
@@ -357,6 +395,148 @@ app.get('/api/test-webhook-server', (req, res) => {
 // Add a health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Add a utility endpoint to check if files exist
+app.get('/api/check-file', (req, res) => {
+  const filePath = req.query.path as string;
+  
+  if (!filePath) {
+    return res.status(400).json({ error: 'No file path provided' });
+  }
+  
+  console.log(`Checking if file exists: ${filePath}`);
+  
+  let absolutePath = filePath;
+  if (filePath.startsWith('./')) {
+    absolutePath = path.join(process.cwd(), filePath.substring(2));
+  } else if (!path.isAbsolute(filePath)) {
+    absolutePath = path.join(process.cwd(), filePath);
+  }
+  
+  console.log(`Absolute path: ${absolutePath}`);
+  
+  const exists = fs.existsSync(absolutePath);
+  console.log(`File exists: ${exists}`);
+  
+  if (exists) {
+    const stats = fs.statSync(absolutePath);
+    return res.json({
+      exists,
+      path: filePath,
+      absolutePath,
+      size: stats.size,
+      isFile: stats.isFile(),
+      isDirectory: stats.isDirectory(),
+      created: stats.birthtime,
+      modified: stats.mtime
+    });
+  } else {
+    // Check if the directory exists
+    const dirPath = path.dirname(absolutePath);
+    const dirExists = fs.existsSync(dirPath);
+    
+    let dirContents = [];
+    if (dirExists) {
+      dirContents = fs.readdirSync(dirPath);
+    }
+    
+    return res.json({
+      exists,
+      path: filePath,
+      absolutePath,
+      directoryExists: dirExists,
+      directoryPath: dirPath,
+      directoryContents: dirContents
+    });
+  }
+});
+
+// Add an endpoint to update a trigger's media file
+app.post('/api/update-trigger-media', (req, res) => {
+  try {
+    const { triggerId, mediaFile } = req.body;
+    
+    console.log(`Updating media file for trigger ${triggerId} to ${mediaFile}`);
+    
+    if (!triggerId || !mediaFile) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+    
+    // Check if the file exists
+    let absolutePath;
+    if (mediaFile.startsWith('./')) {
+      absolutePath = path.join(process.cwd(), mediaFile.substring(2));
+    } else {
+      absolutePath = path.join(process.cwd(), mediaFile);
+    }
+    
+    if (!fs.existsSync(absolutePath)) {
+      console.error(`Media file not found: ${absolutePath}`);
+      return res.status(404).json({ error: 'Media file not found' });
+    }
+    
+    // Update the trigger in triggers.json
+    const triggersPath = path.join(process.cwd(), 'triggers.json');
+    const triggers = JSON.parse(fs.readFileSync(triggersPath, 'utf-8'));
+    
+    const triggerIndex = triggers.triggers.findIndex((t: any) => t.id === triggerId);
+    
+    if (triggerIndex < 0) {
+      return res.status(404).json({ error: 'Trigger not found' });
+    }
+    
+    // Update the media file path
+    triggers.triggers[triggerIndex].nftMetadata.mediaFile = mediaFile;
+    fs.writeFileSync(triggersPath, JSON.stringify(triggers, null, 2));
+    
+    console.log(`Updated trigger ${triggerId} with media file ${mediaFile}`);
+    
+    res.json({ 
+      success: true, 
+      triggerId,
+      mediaFile
+    });
+  } catch (error) {
+    console.error('Error updating trigger media:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to update trigger media', details: errorMessage });
+  }
+});
+
+// Add an endpoint to restart a trigger
+app.post('/api/restart-trigger', (req, res) => {
+  try {
+    const { triggerId } = req.body;
+    
+    console.log(`Restarting trigger ${triggerId}`);
+    
+    if (!triggerId) {
+      return res.status(400).json({ error: 'Missing trigger ID' });
+    }
+    
+    // Forward the request to the main application
+    fetch(`http://localhost:${process.env.WEBHOOK_PORT || 3001}/api/restart-trigger`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ triggerId })
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log(`Response from restart trigger: ${JSON.stringify(data)}`);
+      res.json(data);
+    })
+    .catch(error => {
+      console.error(`Error restarting trigger: ${error}`);
+      res.status(500).json({ error: 'Failed to restart trigger' });
+    });
+  } catch (error) {
+    console.error('Error in restart trigger endpoint:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Failed to restart trigger', details: errorMessage });
+  }
 });
 
 // Start the server

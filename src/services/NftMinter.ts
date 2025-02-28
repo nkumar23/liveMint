@@ -16,6 +16,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import express from 'express';
+import { Keypair } from '@solana/web3.js';
 
 export class NftMinter {
   private config: MinterConfig;
@@ -32,26 +33,50 @@ export class NftMinter {
     try {
       console.log('Initializing NFT minter...');
       
-      // Initialize Umi
-      this.umi = createUmi(this.config.rpcEndpoint)
-        .use(irysUploader())
-        .use(mplTokenMetadata());
-      
-      // Load wallet
-      const homeDir = os.homedir();
-      const walletPath = this.config.artistWallet.replace('~', homeDir);
-      console.log(`Loading wallet from: ${walletPath}`);
-      
-      if (!fs.existsSync(walletPath)) {
-        throw new Error(`Wallet file not found at: ${walletPath}`);
+      // Check if we're on mainnet
+      const isMainnet = process.env.NETWORK === 'mainnet';
+      if (isMainnet) {
+        console.log('⚠️ RUNNING IN MAINNET MODE - REAL TRANSACTIONS WILL BE MADE ⚠️');
+      } else {
+        console.log('Running in DEVNET mode - no real transactions will be made');
       }
       
-      const keypairFile = fs.readFileSync(walletPath, 'utf-8');
-      const keypairData = JSON.parse(keypairFile);
-      this.wallet = this.umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
-      this.umi.use(keypairIdentity(this.wallet));
+      // Initialize Umi with network-specific settings
+      this.umi = createUmi(this.config.rpcEndpoint)
+        .use(irysUploader({
+          address: isMainnet ? 'https://node1.irys.xyz' : 'https://devnet.irys.xyz',
+          timeout: isMainnet ? 120000 : 60000
+        }))
+        .use(mplTokenMetadata());
       
-      console.log(`Wallet loaded successfully`);
+      // Load wallet with extra safeguards for mainnet
+      try {
+        console.log(`Loading wallet from: ${this.config.artistWallet}`);
+        const walletPath = this.config.artistWallet.startsWith('~') 
+          ? this.config.artistWallet.replace('~', os.homedir())
+          : this.config.artistWallet;
+        
+        const keypairFile = fs.readFileSync(walletPath, 'utf-8');
+        const keypairData = JSON.parse(keypairFile);
+        
+        // Create a UMI keypair instead of a Solana web3.js keypair
+        this.wallet = this.umi.eddsa.createKeypairFromSecretKey(new Uint8Array(keypairData));
+        this.umi.use(keypairIdentity(this.wallet));
+        
+        console.log('Wallet loaded successfully');
+        
+        // Check wallet balance using UMI
+        const balance = await this.umi.rpc.getBalance(this.wallet.publicKey);
+        const solBalance = Number(balance.basisPoints) / 1000000000;
+        console.log(`Wallet balance: ${solBalance} SOL`);
+        
+        if (isMainnet && solBalance < 0.1) {
+          console.warn('⚠️ WARNING: Wallet balance is low. You may not have enough SOL for minting NFTs.');
+        }
+      } catch (error) {
+        console.error('Error loading wallet:', error);
+        throw new Error('Failed to load wallet');
+      }
       
       // Initialize mint counts for each trigger
       for (const mapping of this.config.triggerMappings) {
@@ -79,6 +104,31 @@ export class NftMinter {
 
   async mintNft(triggerId: string, timestamp: Date = new Date()): Promise<string> {
     try {
+      if (process.env.NETWORK !== 'mainnet') {
+        console.warn('⚠️ WARNING: Not running in mainnet mode. This transaction will be on devnet.');
+      }
+
+      // Check if we're connected to the expected network
+      try {
+        const genesisHash = await this.umi.rpc.getGenesisHash();
+        const isMainnet = genesisHash === '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+        
+        if (process.env.NETWORK === 'mainnet' && !isMainnet) {
+          console.error('ERROR: Expected to be on mainnet but connected to a different network');
+          throw new Error('Network mismatch - expected mainnet');
+        } else if (process.env.NETWORK !== 'mainnet' && isMainnet) {
+          console.error('ERROR: Expected to be on devnet but connected to mainnet');
+          throw new Error('Network mismatch - unexpected mainnet connection');
+        }
+        
+        console.log(`Confirmed on ${isMainnet ? 'mainnet' : 'devnet'}`);
+      } catch (error: any) {
+        if (error.message?.includes('Network mismatch')) {
+          throw error;
+        }
+        console.warn('Could not verify network:', error);
+      }
+
       // Find the trigger mapping
       const mapping = this.config.triggerMappings.find(m => m.id === triggerId);
       if (!mapping) {
@@ -105,10 +155,26 @@ export class NftMinter {
       let mediaFilePath = metadata.mediaFile;
       if (mediaFilePath.startsWith('./')) {
         // Convert from relative path to absolute path
-        mediaFilePath = path.join(__dirname, '../../', mediaFilePath.substring(2));
+        mediaFilePath = path.join(process.cwd(), mediaFilePath.substring(2));
+      } else if (!path.isAbsolute(mediaFilePath)) {
+        // If it's not absolute and doesn't start with ./, assume it's relative to project root
+        mediaFilePath = path.join(process.cwd(), mediaFilePath);
       }
       
       console.log(`Loading media file from: ${mediaFilePath}`);
+      
+      // Add debugging information
+      console.log('Current working directory:', process.cwd());
+      try {
+        const dirPath = path.dirname(mediaFilePath);
+        if (fs.existsSync(dirPath)) {
+          console.log(`Files in ${dirPath}:`, fs.readdirSync(dirPath));
+        } else {
+          console.log(`Directory does not exist: ${dirPath}`);
+        }
+      } catch (error) {
+        console.error('Error listing directory:', error);
+      }
       
       // Check if the file exists
       if (!fs.existsSync(mediaFilePath)) {
@@ -141,6 +207,18 @@ export class NftMinter {
       const metadataUri = await this.umi.uploader.uploadJson(nftMetadata);
       console.log('Metadata uploaded:', metadataUri);
 
+      // Check wallet balance before minting
+      console.log('Checking wallet balance before minting...');
+      const balance = await this.umi.rpc.getBalance(this.wallet.publicKey);
+      const solBalance = Number(balance.basisPoints) / 1000000000;
+      console.log(`Current wallet balance: ${solBalance} SOL`);
+      console.log(`Wallet public key: ${this.wallet.publicKey}`);
+
+      if (solBalance < 0.05) {
+        console.error('Insufficient funds for minting. Please add more SOL to your wallet.');
+        throw new Error('Insufficient funds for minting');
+      }
+
       // Create NFT
       console.log('Minting NFT...');
       const mint = generateSigner(this.umi);
@@ -159,7 +237,7 @@ export class NftMinter {
       console.log('\nNFT Created Successfully!');
       console.log('Mint Address:', mint.publicKey);
       console.log('Owner Address:', this.wallet.publicKey);
-      console.log('View on Explorer:', `https://explorer.solana.com/address/${mint.publicKey}?cluster=devnet`);
+      console.log('View on Explorer:', `https://explorer.solana.com/address/${mint.publicKey}`);
 
       return mint.publicKey.toString();
     } catch (error) {
@@ -173,46 +251,5 @@ export class NftMinter {
     result.name = result.name.replace('{count}', count.toString());
     result.description = result.description.replace('{timestamp}', timestamp.toISOString());
     return result;
-  }
-
-  // Add this method to the NftMinter class for testing
-  async mockMintNft(triggerId: string, timestamp: Date = new Date()): Promise<string> {
-    try {
-      // Find the trigger mapping
-      const mapping = this.config.triggerMappings.find(m => m.id === triggerId);
-      if (!mapping) {
-        throw new Error(`Trigger mapping not found for ID: ${triggerId}`);
-      }
-
-      // Get the current count for this trigger
-      const currentCount = this.mintCounts.get(triggerId) || 0;
-      
-      // Check max supply if set
-      if (this.config.maxSupply !== null && currentCount >= this.config.maxSupply) {
-        console.log(`Max supply reached for trigger ${triggerId}`);
-        return "Max supply reached";
-      }
-
-      // Get the metadata for this NFT
-      const metadata = { ...mapping.nftMetadata };
-      
-      // Replace placeholders in metadata
-      metadata.name = metadata.name.replace('{count}', (currentCount + 1).toString());
-      metadata.description = metadata.description.replace('{timestamp}', timestamp.toISOString());
-      
-      console.log(`MOCK: Would mint NFT with name "${metadata.name}"`);
-      console.log(`MOCK: Using media file: ${metadata.mediaFile}`);
-      
-      // Increment mint count for this trigger
-      this.mintCounts.set(triggerId, currentCount + 1);
-
-      console.log('\nMOCK NFT Created Successfully!');
-      const mockMintAddress = `mock-mint-${Date.now()}`;
-      
-      return mockMintAddress;
-    } catch (error) {
-      console.error(`Error in mock minting NFT for trigger ${triggerId}:`, error);
-      throw error;
-    }
   }
 } 

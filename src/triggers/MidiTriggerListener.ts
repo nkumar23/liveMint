@@ -18,18 +18,23 @@ export class MidiTriggerListener implements TriggerListener {
   }
 
   async start(): Promise<void> {
-    const inputs = easymidi.getInputs();
-    console.log('Available MIDI input ports:', inputs);
-    
-    if (inputs.length === 0) {
-      console.error('No MIDI devices found!');
-      return;
-    }
-    
-    // Use specified device or first available
-    const deviceName = this.config.deviceName || inputs[0];
-    
     try {
+      // Use the correct method to get inputs
+      const inputs = await new Promise<string[]>((resolve) => {
+        const availableInputs = easymidi.getInputs ? easymidi.getInputs() : [];
+        resolve(availableInputs);
+      });
+      
+      console.log('Available MIDI input ports:', inputs);
+      
+      if (inputs.length === 0) {
+        console.error('No MIDI devices found!');
+        return;
+      }
+      
+      // Use specified device or first available
+      const deviceName = this.config.deviceName || inputs[0];
+      
       this.input = new easymidi.Input(deviceName);
       console.log(`Listening to MIDI device: ${deviceName}`);
       
@@ -47,26 +52,7 @@ export class MidiTriggerListener implements TriggerListener {
         }
       });
     } catch (error) {
-      console.error(`⚠️ MIDI device "${deviceName}" not found in available devices!`);
-      console.error('Available devices are:');
-      inputs.forEach((device: string, i: number) => console.error(`  ${i+1}. "${device}"`));
-      
-      // Try to use the first available device instead
-      if (inputs.length > 0) {
-        console.log(`Trying to use the first available device: ${inputs[0]}`);
-        this.input = new easymidi.Input(inputs[0]);
-        
-        this.input.on('noteon', (msg: any) => {
-          if (msg.note === this.config.noteNumber) {
-            if (this.config.channel !== undefined && msg.channel !== this.config.channel) {
-              return;
-            }
-            
-            console.log(`MIDI note ${msg.note} detected on channel ${msg.channel}`);
-            this.callback(new Date());
-          }
-        });
-      }
+      console.error('Error starting MIDI listener:', error);
     }
   }
 
@@ -76,5 +62,6 @@ export class MidiTriggerListener implements TriggerListener {
       this.input = null;
       console.log('MIDI listener stopped');
     }
+    return Promise.resolve();
   }
 } 
